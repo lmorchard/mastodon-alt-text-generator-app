@@ -17,16 +17,67 @@
     }
 
     h1 { margin-bottom: 0.25rem; }
+    h2 { margin: 0 0 1rem; font-size: 1.1rem; }
     p.subtitle { color: #555; margin-top: 0; }
 
-    form {
+    .card {
       background: #fff;
       border: 1px solid #ddd;
       border-radius: 8px;
       padding: 1.5rem;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
     }
 
+    /* Flash messages */
+    .flashes { list-style: none; padding: 0; margin: 0 0 1.25rem; }
+    .flashes li {
+      padding: 0.65rem 1rem;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+    .flashes .success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+    .flashes .error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .flashes .info    { background: #e0f2fe; color: #0c4a6e; border: 1px solid #7dd3fc; }
+
+    /* Mastodon section */
+    .mastodon-status {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+    }
+    .badge-connected    { background: #d1fae5; color: #065f46; }
+    .badge-disconnected { background: #fee2e2; color: #991b1b; }
+    .badge-unconfigured { background: #fef9c3; color: #854d0e; }
+
+    .btn {
+      display: inline-block;
+      border: none;
+      border-radius: 6px;
+      padding: 0.5rem 1.1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn-primary  { background: #2563eb; color: #fff; }
+    .btn-primary:hover  { background: #1d4ed8; }
+    .btn-mastodon { background: #6364ff; color: #fff; }
+    .btn-mastodon:hover { background: #4f46e5; }
+    .btn-danger   { background: #dc2626; color: #fff; }
+    .btn-danger:hover   { background: #b91c1c; }
+    .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.82rem; }
+
+    /* Upload form */
     label {
       display: block;
       font-weight: 600;
@@ -43,7 +94,6 @@
       cursor: pointer;
       margin-bottom: 1rem;
     }
-
     input[type="file"]:hover { border-color: #888; }
 
     button[type="submit"] {
@@ -55,15 +105,11 @@
       font-size: 1rem;
       cursor: pointer;
     }
-
     button[type="submit"]:hover { background: #1d4ed8; }
 
-    .hint {
-      font-size: 0.85rem;
-      color: #666;
-      margin-top: 0.4rem;
-    }
+    .hint { font-size: 0.85rem; color: #666; margin-top: 0.4rem; }
 
+    /* Results */
     .results { display: flex; flex-direction: column; gap: 1.25rem; }
 
     .result-card {
@@ -113,15 +159,8 @@
       border-radius: 0 4px 4px 0;
     }
 
-    .error-card {
-      background: #fff5f5;
-      border-color: #fca5a5;
-    }
-
-    .error-message {
-      color: #b91c1c;
-      font-size: 0.95rem;
-    }
+    .error-card   { background: #fff5f5; border-color: #fca5a5; }
+    .error-message { color: #b91c1c; font-size: 0.95rem; }
 
     @media (max-width: 540px) {
       .result-card { flex-direction: column; }
@@ -131,20 +170,65 @@
 </head>
 <body>
   <h1>Alt Text Generator</h1>
-  <p class="subtitle">Upload images to automatically generate descriptive alt text.</p>
+  <p class="subtitle">Generate accessible alt text for images — locally or from your Mastodon posts.</p>
 
-  <form method="post" enctype="multipart/form-data">
-    <label for="images">Select images (up to 5)</label>
-    <input
-      type="file"
-      id="images"
-      name="images[]"
-      multiple
-      accept=".png,.jpg,.jpeg,.gif,.webp"
-    >
-    <p class="hint">Supported formats: PNG, JPG, JPEG, GIF, WEBP &mdash; max 5 images per upload</p>
-    <button type="submit">Generate Alt Text</button>
-  </form>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+      <li class="{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Mastodon connection card -->
+  <div class="card">
+    <h2>Mastodon</h2>
+    {% if not mastodon_configured %}
+    <div class="mastodon-status">
+      <span class="badge badge-unconfigured">Not configured</span>
+      <span style="font-size:0.9rem;color:#555;">
+        Set <code>MASTODON_BASE_URL</code>, <code>MASTODON_CLIENT_ID</code>, and
+        <code>MASTODON_CLIENT_SECRET</code> to enable Mastodon integration.
+      </span>
+    </div>
+    {% elif mastodon_username %}
+    <div class="mastodon-status">
+      <span class="badge badge-connected">Connected</span>
+      <span style="font-size:0.95rem;">
+        Logged in as <strong>@{{ mastodon_username }}</strong>
+        {% if mastodon_display_name and mastodon_display_name != mastodon_username %}
+          ({{ mastodon_display_name }})
+        {% endif %}
+      </span>
+      <a href="{{ url_for('posts') }}" class="btn btn-primary btn-sm">View posts</a>
+      <a href="{{ url_for('mastodon_logout') }}" class="btn btn-danger btn-sm">Log out</a>
+    </div>
+    {% else %}
+    <div class="mastodon-status">
+      <span class="badge badge-disconnected">Not logged in</span>
+      <a href="{{ url_for('mastodon_login') }}" class="btn btn-mastodon btn-sm">Login with Mastodon</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Local upload card -->
+  <div class="card">
+    <h2>Upload images locally</h2>
+    <form method="post" enctype="multipart/form-data">
+      <label for="images">Select images (up to 5)</label>
+      <input
+        type="file"
+        id="images"
+        name="images[]"
+        multiple
+        accept=".png,.jpg,.jpeg,.gif,.webp"
+      >
+      <p class="hint">Supported formats: PNG, JPG, JPEG, GIF, WEBP &mdash; max 5 images per upload</p>
+      <button type="submit">Generate Alt Text</button>
+    </form>
+  </div>
 
   {% if results %}
   <div class="results">

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Posts — Alt Text Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      background: #f5f5f5;
+      color: #222;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.25rem;
+    }
+
+    h1 { margin: 0; }
+
+    .page-meta { color: #555; font-size: 0.95rem; margin: 0 0 1.5rem; }
+
+    /* Flash messages */
+    .flashes { list-style: none; padding: 0; margin: 0 0 1.25rem; }
+    .flashes li {
+      padding: 0.65rem 1rem;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+    .flashes .success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+    .flashes .error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .flashes .info    { background: #e0f2fe; color: #0c4a6e; border: 1px solid #7dd3fc; }
+
+    /* Buttons */
+    .btn {
+      display: inline-block;
+      border: none;
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      line-height: 1.4;
+    }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-primary  { background: #2563eb; color: #fff; }
+    .btn-primary:hover:not(:disabled)  { background: #1d4ed8; }
+    .btn-success  { background: #16a34a; color: #fff; }
+    .btn-success:hover:not(:disabled)  { background: #15803d; }
+    .btn-ghost    { background: transparent; color: #555; border: 1px solid #ccc; }
+    .btn-ghost:hover:not(:disabled)    { background: #f0f0f0; }
+
+    /* Post list */
+    .posts { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    .post-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .post-header {
+      padding: 0.9rem 1.1rem 0.6rem;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .post-date { font-size: 0.82rem; color: #888; }
+
+    .post-link {
+      font-size: 0.82rem;
+      color: #2563eb;
+      text-decoration: none;
+    }
+    .post-link:hover { text-decoration: underline; }
+
+    .post-content {
+      padding: 0.75rem 1.1rem;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      color: #333;
+      border-bottom: 1px solid #eee;
+    }
+    .post-content p { margin: 0 0 0.4em; }
+    .post-content p:last-child { margin-bottom: 0; }
+
+    .post-images { display: flex; flex-direction: column; gap: 0; }
+
+    /* Individual image row */
+    .image-row {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem 1.1rem;
+      border-bottom: 1px solid #f0f0f0;
+      align-items: flex-start;
+    }
+    .image-row:last-child { border-bottom: none; }
+
+    .image-thumb {
+      width: 150px;
+      height: 110px;
+      object-fit: cover;
+      border-radius: 6px;
+      flex-shrink: 0;
+      border: 1px solid #e5e7eb;
+      cursor: pointer;
+    }
+
+    .image-info { flex: 1; min-width: 0; }
+
+    .alt-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      margin-bottom: 0.6rem;
+    }
+    .alt-status.has-alt    { background: #d1fae5; color: #065f46; }
+    .alt-status.missing-alt { background: #fef3c7; color: #92400e; }
+
+    .current-alt {
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: #374151;
+      background: #f0f4ff;
+      border-left: 3px solid #2563eb;
+      padding: 0.45rem 0.7rem;
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 0.75rem;
+      word-break: break-word;
+    }
+
+    .alt-editor { display: none; margin-top: 0.5rem; }
+    .alt-editor.visible { display: block; }
+
+    .alt-textarea {
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 72px;
+      margin-bottom: 0.6rem;
+    }
+    .alt-textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+    }
+
+    .editor-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+    .inline-status {
+      font-size: 0.82rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      display: none;
+    }
+    .inline-status.visible { display: inline-block; }
+    .inline-status.ok  { background: #d1fae5; color: #065f46; }
+    .inline-status.err { background: #fee2e2; color: #991b1b; }
+
+    .char-count { font-size: 0.78rem; color: #888; margin-left: auto; }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #666;
+    }
+    .empty-state p { margin: 0.4rem 0; }
+
+    @media (max-width: 540px) {
+      .image-row { flex-direction: column; }
+      .image-thumb { width: 100%; height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Your Mastodon Posts</h1>
+    <a href="{{ url_for('index') }}" class="btn btn-ghost" style="font-size:0.85rem;">&#8592; Back</a>
+  </div>
+  <p class="page-meta">
+    Showing posts with images for <strong>@{{ username }}</strong>.
+    Posts missing alt text are highlighted.
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+      <li class="{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  {% endwith %}
+
+  {% if posts %}
+  <div class="posts">
+    {% for post in posts %}
+    <article class="post-card">
+      <div class="post-header">
+        <span class="post-date">{{ post.created_at.strftime('%b %-d, %Y at %-I:%M %p') if post.created_at else '' }}</span>
+        <a href="{{ post.url }}" target="_blank" rel="noopener" class="post-link">View on Mastodon &#8599;</a>
+      </div>
+
+      {% if post.content %}
+      <div class="post-content">{{ post.content | safe }}</div>
+      {% endif %}
+
+      <div class="post-images">
+        {% for img in post.images %}
+        <div class="image-row" id="img-row-{{ img.id }}">
+          <img
+            src="{{ img.preview_url }}"
+            alt="{{ img.alt_text }}"
+            class="image-thumb"
+            title="Click to view full image"
+            onclick="window.open('{{ img.url }}', '_blank')"
+          >
+          <div class="image-info">
+            {% if img.missing_alt %}
+            <span class="alt-status missing-alt">&#9888; Missing alt text</span>
+            {% else %}
+            <span class="alt-status has-alt">&#10003; Has alt text</span>
+            {% endif %}
+
+            {% if img.alt_text %}
+            <div class="current-alt" id="current-alt-{{ img.id }}">{{ img.alt_text }}</div>
+            {% endif %}
+
+            <!-- Editor (hidden until Generate is clicked) -->
+            <div class="alt-editor" id="editor-{{ img.id }}">
+              <textarea
+                class="alt-textarea"
+                id="textarea-{{ img.id }}"
+                placeholder="Alt text will appear here…"
+                maxlength="1500"
+                oninput="updateCharCount('{{ img.id }}')"
+              >{{ img.alt_text }}</textarea>
+              <div class="editor-actions">
+                <button
+                  class="btn btn-primary"
+                  onclick="generateAltText('{{ img.id }}', '{{ img.url }}')"
+                  id="gen-btn-{{ img.id }}"
+                >
+                  &#10024; Generate
+                </button>
+                <button
+                  class="btn btn-success"
+                  onclick="updateAltText('{{ img.id }}', '{{ img.id }}')"
+                  id="save-btn-{{ img.id }}"
+                >
+                  &#8593; Update on Mastodon
+                </button>
+                <button
+                  class="btn btn-ghost"
+                  onclick="closeEditor('{{ img.id }}')"
+                >
+                  Cancel
+                </button>
+                <span class="inline-status" id="status-{{ img.id }}"></span>
+                <span class="char-count" id="chars-{{ img.id }}">{{ img.alt_text | length }}&thinsp;/&thinsp;1500</span>
+              </div>
+            </div>
+
+            <!-- Actions shown when editor is closed -->
+            <div id="actions-{{ img.id }}">
+              {% if img.missing_alt %}
+              <button
+                class="btn btn-primary"
+                onclick="openEditor('{{ img.id }}', '{{ img.url }}')"
+              >
+                &#10024; Generate alt text
+              </button>
+              {% else %}
+              <button
+                class="btn btn-ghost"
+                style="font-size:0.82rem;"
+                onclick="openEditor('{{ img.id }}', null)"
+              >
+                &#9998; Edit alt text
+              </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <p style="font-size:2rem;">&#128444;</p>
+    <p><strong>No posts with images found.</strong></p>
+    <p>Your 40 most recent posts were checked.</p>
+  </div>
+  {% endif %}
+
+  <script>
+    function openEditor(imgId, imageUrl) {
+      document.getElementById('editor-' + imgId).classList.add('visible');
+      document.getElementById('actions-' + imgId).style.display = 'none';
+      if (imageUrl) {
+        generateAltText(imgId, imageUrl);
+      }
+    }
+
+    function closeEditor(imgId) {
+      document.getElementById('editor-' + imgId).classList.remove('visible');
+      document.getElementById('actions-' + imgId).style.display = '';
+      setStatus(imgId, '', '');
+    }
+
+    function updateCharCount(imgId) {
+      const ta = document.getElementById('textarea-' + imgId);
+      document.getElementById('chars-' + imgId).textContent =
+        ta.value.length + '\u2009/\u20091500';
+    }
+
+    function setStatus(imgId, msg, type) {
+      const el = document.getElementById('status-' + imgId);
+      el.textContent = msg;
+      el.className = 'inline-status' + (msg ? ' visible ' + type : '');
+    }
+
+    async function generateAltText(imgId, imageUrl) {
+      const genBtn = document.getElementById('gen-btn-' + imgId);
+      const saveBtn = document.getElementById('save-btn-' + imgId);
+      genBtn.disabled = true;
+      genBtn.textContent = 'Generating…';
+      setStatus(imgId, '', '');
+
+      try {
+        const resp = await fetch('/api/generate-alt-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_url: imageUrl }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          throw new Error(data.error || 'Unknown error');
+        }
+        const ta = document.getElementById('textarea-' + imgId);
+        ta.value = data.alt_text;
+        updateCharCount(imgId);
+        setStatus(imgId, 'Generated — review and save', 'ok');
+      } catch (err) {
+        setStatus(imgId, 'Error: ' + err.message, 'err');
+      } finally {
+        genBtn.disabled = false;
+        genBtn.textContent = '✨ Re-generate';
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function updateAltText(imgId, mediaId) {
+      const saveBtn = document.getElementById('save-btn-' + imgId);
+      const altText = document.getElementById('textarea-' + imgId).value.trim();
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      setStatus(imgId, '', '');
+
+      try {
+        const resp = await fetch('/api/update-alt-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ media_id: mediaId, alt_text: altText }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          throw new Error(data.error || 'Unknown error');
+        }
+
+        // Update the displayed alt text and badge in-place
+        const row = document.getElementById('img-row-' + imgId);
+        const badge = row.querySelector('.alt-status');
+        badge.className = 'alt-status has-alt';
+        badge.innerHTML = '&#10003; Has alt text';
+
+        const currentAlt = document.getElementById('current-alt-' + imgId);
+        if (currentAlt) {
+          currentAlt.textContent = altText;
+        } else {
+          const info = row.querySelector('.image-info');
+          const newAlt = document.createElement('div');
+          newAlt.id = 'current-alt-' + imgId;
+          newAlt.className = 'current-alt';
+          newAlt.textContent = altText;
+          badge.after(newAlt);
+        }
+
+        setStatus(imgId, 'Saved to Mastodon!', 'ok');
+        saveBtn.textContent = '↑ Update on Mastodon';
+      } catch (err) {
+        setStatus(imgId, 'Error: ' + err.message, 'err');
+        saveBtn.textContent = '↑ Update on Mastodon';
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
