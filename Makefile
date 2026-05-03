@@ -10,8 +10,8 @@ install:
 	uv sync
 
 run:
-	@echo "Running Flask application on $(HOST):$(PORT)..."
-	FLASK_APP=app.py uv run flask run --host $(HOST) --port $(PORT)
+	@echo "Running Flask application on $(HOST):$(PORT)... (Debug mode enabled)"
+	FLASK_APP=app.py uv run flask run --host $(HOST) --port $(PORT) --debug
 
 clean:
 	@echo "Cleaning up virtual environment and build artifacts..."
