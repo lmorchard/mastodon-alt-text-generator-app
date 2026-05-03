@@ -1,5 +1,8 @@
 import os
 import base64
+from dotenv import load_dotenv
+
+load_dotenv()
 import requests as http_requests
 from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify
 import openai
