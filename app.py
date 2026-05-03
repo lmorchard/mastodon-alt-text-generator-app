@@ -54,7 +54,7 @@ def generate_alt_text(client, image_data_b64, media_type):
                 ],
             }
         ],
-        max_tokens=200,
+        max_tokens=1000,
     )
     return response.choices[0].message.content.strip()
 
@@ -289,19 +289,58 @@ def api_update_alt_text():
         return jsonify({'error': 'Not logged in'}), 401
 
     data = request.get_json(silent=True) or {}
+    post_id = data.get('post_id')
     media_id = data.get('media_id')
     alt_text = (data.get('alt_text') or '').strip()
 
-    if not media_id:
-        return jsonify({'error': 'No media_id provided'}), 400
+    if not post_id or not media_id:
+        return jsonify({'error': 'post_id or media_id not provided'}), 400
 
     try:
         mastodon = get_mastodon_client(access_token)
-        mastodon.media_update(media_id, description=alt_text)
+
+        # 1. Fetch the original status
+        status = mastodon.status(post_id)
+
+        # 2. Prepare media attributes for update
+        media_attributes = []
+        found_media = False
+
+        for media_attachment in status['media_attachments']:
+            current_media_id = str(media_attachment['id'])
+
+            attr_dict = {
+                'id': current_media_id,
+                'description': media_attachment.get('description', '')
+            }
+
+            if current_media_id == str(media_id):
+                attr_dict['description'] = alt_text
+                found_media = True
+
+            media_attributes.append(attr_dict)
+
+        if not found_media:
+            return jsonify({'error': 'Media attachment not found in status'}), 404
+
+        # 3. Update the status using mastodon.status_update
+        mastodon.status_update(
+            id=post_id, # Crucial: Pass the status ID for editing
+            status=status['text'], # Use raw text content to avoid double-encoding
+            media_attributes=media_attributes,
+            spoiler_text=status['spoiler_text'],
+            sensitive=status['sensitive'],
+        )
+
         return jsonify({'success': True})
     except Exception as e:
+        # Check for specific Mastodon API errors
+        # Attempt to import MastodonAPIError to use it for type checking
+        try:
+            from Mastodon import MastodonAPIError
+            if isinstance(e, MastodonAPIError):
+                return jsonify({'error': f'Mastodon API Error: {e.args[0]}'}), 500
+        except ImportError:
+            pass # Fallback if MastodonAPIError not directly importable
+
         return jsonify({'error': str(e)}), 500
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
