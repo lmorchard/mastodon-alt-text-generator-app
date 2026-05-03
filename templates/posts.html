@@ -493,6 +493,7 @@
 
         batchStatus.textContent = `Processing ${done + 1} of ${missingRows.length}…`;
 
+        let altText = null;
         try {
           // Generate
           const genResp = await fetch('/api/generate-alt-text', {
@@ -503,7 +504,7 @@
           const genData = await genResp.json();
           if (!genResp.ok || genData.error) throw new Error(genData.error || 'Generation failed');
 
-          const altText = genData.alt_text;
+          altText = genData.alt_text;
 
           // Update on Mastodon
           const saveResp = await fetch('/api/update-alt-text', {
@@ -518,7 +519,17 @@
           done++;
         } catch (err) {
           errors++;
-          setStatus(imgId, 'Batch error: ' + err.message, 'err');
+          // If alt text was generated before the save failed, populate the textarea
+          // so the user can manually save it after fixing the error.
+          if (altText) {
+            const ta = document.getElementById('textarea-' + imgId);
+            ta.value = altText;
+            updateCharCount(imgId);
+          }
+          // Open the editor so the error message is actually visible to the user.
+          document.getElementById('editor-' + imgId).classList.add('visible');
+          document.getElementById('actions-' + imgId).style.display = 'none';
+          setStatus(imgId, 'Error: ' + err.message, 'err');
         }
       }
 
