@@ -16,6 +16,9 @@ develop-eggs/
 lib/
 lib64/
 
+# uv
+uv.lock
+
 # Virtual environments
 .env
 .venv
