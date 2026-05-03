@@ -6,7 +6,7 @@ load_dotenv()
 import requests as http_requests
 from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify
 import openai
-from mastodon import Mastodon
+from mastodon import Mastodon, MastodonAPIError
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-change-in-production')
@@ -299,10 +299,14 @@ def api_update_alt_text():
     try:
         mastodon = get_mastodon_client(access_token)
 
-        # 1. Fetch the original status
+        # 1. Fetch the status source — gives raw (unrendered) text and spoiler_text
+        #    suitable for passing back to status_update without HTML corruption.
+        source = mastodon.status_source(post_id)
+
+        # 2. Fetch the full status for media_attachments and sensitive flag.
         status = mastodon.status(post_id)
 
-        # 2. Prepare media attributes for update
+        # 3. Prepare media attributes for update
         media_attributes = []
         found_media = False
 
@@ -323,24 +327,18 @@ def api_update_alt_text():
         if not found_media:
             return jsonify({'error': 'Media attachment not found in status'}), 404
 
-        # 3. Update the status using mastodon.status_update
+        # 4. Update the status; use raw text from status_source to avoid
+        #    re-posting HTML-rendered content back as literal tag characters.
         mastodon.status_update(
-            id=post_id, # Crucial: Pass the status ID for editing
-            status=status['text'], # Use raw text content to avoid double-encoding
+            post_id,
+            status=source.get('text', ''),
             media_attributes=media_attributes,
-            spoiler_text=status['spoiler_text'],
-            sensitive=status['sensitive'],
+            spoiler_text=source.get('spoiler_text', ''),
+            sensitive=status.get('sensitive', False),
         )
 
         return jsonify({'success': True})
+    except MastodonAPIError as e:
+        return jsonify({'error': f'Mastodon API error: {e}'}), 500
     except Exception as e:
-        # Check for specific Mastodon API errors
-        # Attempt to import MastodonAPIError to use it for type checking
-        try:
-            from Mastodon import MastodonAPIError
-            if isinstance(e, MastodonAPIError):
-                return jsonify({'error': f'Mastodon API Error: {e.args[0]}'}), 500
-        except ImportError:
-            pass # Fallback if MastodonAPIError not directly importable
-
         return jsonify({'error': str(e)}), 500
