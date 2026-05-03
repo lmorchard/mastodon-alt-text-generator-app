@@ -32,7 +32,7 @@ def get_openai_client():
 
 def generate_alt_text(client, image_data_b64, media_type):
     response = client.chat.completions.create(
-        model='gpt-4o-mini',
+        model=os.environ.get('ALT_TEXT_LLM_MODEL', 'gpt-4o-mini'),
         messages=[
             {
                 'role': 'user',
@@ -157,7 +157,7 @@ def mastodon_login():
     try:
         auth_url = mastodon.auth_request_url(
             redirect_uris=redirect_uri,
-            scopes=['read', 'write'],
+            scopes=['read:statuses', 'write:media', 'write:statuses', 'read:accounts'],
         )
     except Exception as e:
         flash(f'Could not build Mastodon login URL: {e}', 'error')
@@ -183,7 +183,7 @@ def mastodon_callback():
         access_token = mastodon.log_in(
             code=code,
             redirect_uri=redirect_uri,
-            scopes=['read', 'write'],
+            scopes=['read:statuses', 'write:media', 'write:statuses', 'read:accounts'],
         )
         authed = get_mastodon_client(access_token)
         account = authed.me()
