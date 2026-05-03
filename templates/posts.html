@@ -409,6 +409,22 @@
         newAlt.textContent = altText;
         badge.after(newAlt);
       }
+      
+      closeEditor(imgId); // Close editor after successful save
+
+      // Also, update the action button from 'Generate' to 'Edit'
+      const actionsDiv = document.getElementById('actions-' + imgId);
+      if (actionsDiv) {
+        actionsDiv.innerHTML = `
+          <button
+            class="btn btn-ghost"
+            style="font-size:0.82rem;"
+            onclick="openEditor('${imgId}', null)"
+          >
+            &#9998; Edit alt text
+          </button>
+        `;
+      }
     }
 
     async function generateAltText(imgId, imageUrl) {
