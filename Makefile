@@ -8,7 +8,7 @@ install:
 
 run:
 	@echo "Running Flask application..."
-	FLASK_APP=app.py uv run flask run
+	FLASK_APP=app.py uv run flask run --host 0.0.0.0
 
 clean:
 	@echo "Cleaning up virtual environment and build artifacts..."
