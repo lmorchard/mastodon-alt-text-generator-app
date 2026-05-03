@@ -59,6 +59,8 @@
     .btn-success:hover:not(:disabled)  { background: #15803d; }
     .btn-ghost    { background: transparent; color: #555; border: 1px solid #ccc; }
     .btn-ghost:hover:not(:disabled)    { background: #f0f0f0; }
+    .btn-batch    { background: #7c3aed; color: #fff; }
+    .btn-batch:hover:not(:disabled)    { background: #6d28d9; }
 
     /* Post list */
     .posts { display: flex; flex-direction: column; gap: 1.5rem; }
@@ -100,6 +102,23 @@
     .post-content p:last-child { margin-bottom: 0; }
 
     .post-images { display: flex; flex-direction: column; gap: 0; }
+
+    /* Batch action footer */
+    .post-footer {
+      padding: 0.85rem 1.1rem;
+      border-top: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .batch-status {
+      font-size: 0.85rem;
+      color: #555;
+    }
+    .batch-status.ok  { color: #065f46; font-weight: 600; }
+    .batch-status.err { color: #991b1b; font-weight: 600; }
 
     /* Individual image row */
     .image-row {
@@ -222,7 +241,8 @@
   {% if posts %}
   <div class="posts">
     {% for post in posts %}
-    <article class="post-card">
+    {% set missing_count = post.images | selectattr('missing_alt') | list | length %}
+    <article class="post-card" id="post-{{ post.id }}" data-post-id="{{ post.id }}">
       <div class="post-header">
         <span class="post-date">{{ post.created_at.strftime('%b %-d, %Y at %-I:%M %p') if post.created_at else '' }}</span>
         <a href="{{ post.url }}" target="_blank" rel="noopener" class="post-link">View on Mastodon &#8599;</a>
@@ -234,7 +254,13 @@
 
       <div class="post-images">
         {% for img in post.images %}
-        <div class="image-row" id="img-row-{{ img.id }}">
+        <div
+          class="image-row"
+          id="img-row-{{ img.id }}"
+          data-media-id="{{ img.id }}"
+          data-image-url="{{ img.url }}"
+          data-missing-alt="{{ 'true' if img.missing_alt else 'false' }}"
+        >
           <img
             src="{{ img.preview_url }}"
             alt="{{ img.alt_text }}"
@@ -311,6 +337,20 @@
         </div>
         {% endfor %}
       </div>
+
+      {% if missing_count > 0 %}
+      <div class="post-footer" id="post-footer-{{ post.id }}">
+        <button
+          class="btn btn-batch"
+          id="batch-btn-{{ post.id }}"
+          onclick="processAllMissingAltText('{{ post.id }}')"
+        >
+          &#9889; Generate &amp; Update All Missing Alt-Text
+          <span id="batch-count-{{ post.id }}">({{ missing_count }})</span>
+        </button>
+        <span class="batch-status" id="batch-status-{{ post.id }}"></span>
+      </div>
+      {% endif %}
     </article>
     {% endfor %}
   </div>
@@ -348,6 +388,26 @@
       const el = document.getElementById('status-' + imgId);
       el.textContent = msg;
       el.className = 'inline-status' + (msg ? ' visible ' + type : '');
+    }
+
+    function markImageSaved(imgId, altText) {
+      const row = document.getElementById('img-row-' + imgId);
+      row.dataset.missingAlt = 'false';
+
+      const badge = row.querySelector('.alt-status');
+      badge.className = 'alt-status has-alt';
+      badge.innerHTML = '&#10003; Has alt text';
+
+      const currentAlt = document.getElementById('current-alt-' + imgId);
+      if (currentAlt) {
+        currentAlt.textContent = altText;
+      } else {
+        const newAlt = document.createElement('div');
+        newAlt.id = 'current-alt-' + imgId;
+        newAlt.className = 'current-alt';
+        newAlt.textContent = altText;
+        badge.after(newAlt);
+      }
     }
 
     async function generateAltText(imgId, imageUrl) {
@@ -397,25 +457,7 @@
         if (!resp.ok || data.error) {
           throw new Error(data.error || 'Unknown error');
         }
-
-        // Update the displayed alt text and badge in-place
-        const row = document.getElementById('img-row-' + imgId);
-        const badge = row.querySelector('.alt-status');
-        badge.className = 'alt-status has-alt';
-        badge.innerHTML = '&#10003; Has alt text';
-
-        const currentAlt = document.getElementById('current-alt-' + imgId);
-        if (currentAlt) {
-          currentAlt.textContent = altText;
-        } else {
-          const info = row.querySelector('.image-info');
-          const newAlt = document.createElement('div');
-          newAlt.id = 'current-alt-' + imgId;
-          newAlt.className = 'current-alt';
-          newAlt.textContent = altText;
-          badge.after(newAlt);
-        }
-
+        markImageSaved(imgId, altText);
         setStatus(imgId, 'Saved to Mastodon!', 'ok');
         saveBtn.textContent = '↑ Update on Mastodon';
       } catch (err) {
@@ -423,6 +465,77 @@
         saveBtn.textContent = '↑ Update on Mastodon';
       } finally {
         saveBtn.disabled = false;
+      }
+    }
+
+    async function processAllMissingAltText(postId) {
+      const batchBtn = document.getElementById('batch-btn-' + postId);
+      const batchStatus = document.getElementById('batch-status-' + postId);
+      const post = document.getElementById('post-' + postId);
+
+      const missingRows = [...post.querySelectorAll('.image-row[data-missing-alt="true"]')];
+      if (missingRows.length === 0) {
+        batchStatus.textContent = 'No images missing alt text.';
+        batchStatus.className = 'batch-status ok';
+        return;
+      }
+
+      batchBtn.disabled = true;
+      batchStatus.className = 'batch-status';
+
+      let done = 0;
+      let errors = 0;
+
+      for (const row of missingRows) {
+        const imgId = row.dataset.mediaId;
+        const imageUrl = row.dataset.imageUrl;
+
+        batchStatus.textContent = `Processing ${done + 1} of ${missingRows.length}…`;
+
+        try {
+          // Generate
+          const genResp = await fetch('/api/generate-alt-text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_url: imageUrl }),
+          });
+          const genData = await genResp.json();
+          if (!genResp.ok || genData.error) throw new Error(genData.error || 'Generation failed');
+
+          const altText = genData.alt_text;
+
+          // Update on Mastodon
+          const saveResp = await fetch('/api/update-alt-text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ media_id: imgId, alt_text: altText }),
+          });
+          const saveData = await saveResp.json();
+          if (!saveResp.ok || saveData.error) throw new Error(saveData.error || 'Update failed');
+
+          markImageSaved(imgId, altText);
+          done++;
+        } catch (err) {
+          errors++;
+          setStatus(imgId, 'Batch error: ' + err.message, 'err');
+        }
+      }
+
+      // Update batch button count to reflect remaining missing
+      const stillMissing = post.querySelectorAll('.image-row[data-missing-alt="true"]').length;
+      if (stillMissing === 0) {
+        document.getElementById('post-footer-' + postId).style.display = 'none';
+      } else {
+        document.getElementById('batch-count-' + postId).textContent = '(' + stillMissing + ')';
+        batchBtn.disabled = false;
+      }
+
+      if (errors === 0) {
+        batchStatus.textContent = `Done — updated ${done} image${done !== 1 ? 's' : ''}.`;
+        batchStatus.className = 'batch-status ok';
+      } else {
+        batchStatus.textContent = `${done} updated, ${errors} failed — see individual errors above.`;
+        batchStatus.className = 'batch-status err';
       }
     }
   </script>
