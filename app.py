@@ -1,8 +1,11 @@
 import os
 import base64
+import ipaddress
+import urllib.parse
 from dotenv import load_dotenv
 
 load_dotenv()
+
 import requests as http_requests
 from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify
 import openai
@@ -10,9 +13,32 @@ from mastodon import Mastodon, MastodonAPIError
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-change-in-production')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+ALLOWED_MEDIA_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp'}
 MAX_IMAGES = 5
+MASTODON_SCOPES = ['read:statuses', 'write:media', 'write:statuses', 'read:accounts']
+
+# Tags allowed when rendering Mastodon post HTML
+_ALLOWED_HTML_TAGS = {'p', 'br', 'a', 'span', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li'}
+_ALLOWED_HTML_ATTRS = {'a': ['href', 'rel', 'target'], 'span': ['class']}
+
+
+def _sanitize_html(html: str) -> str:
+    """Strip all but a safe subset of HTML tags from Mastodon post content."""
+    try:
+        import bleach
+        return bleach.clean(
+            html,
+            tags=_ALLOWED_HTML_TAGS,
+            attributes=_ALLOWED_HTML_ATTRS,
+            strip=True,
+        )
+    except ImportError:
+        # bleach not installed — escape everything to be safe
+        import html as html_mod
+        return html_mod.escape(html)
 
 
 # ---------------------------------------------------------------------------
@@ -21,6 +47,26 @@ MAX_IMAGES = 5
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def _safe_image_url(url: str) -> bool:
+    """Return True only if the URL scheme is http/https and the host is not a private/loopback address."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in ('http', 'https'):
+        return False
+    hostname = parsed.hostname or ''
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            return False
+    except ValueError:
+        # hostname is a domain name, not a bare IP — block localhost explicitly
+        if hostname.lower() in ('localhost', ''):
+            return False
+    return True
 
 
 def get_openai_client():
@@ -116,6 +162,8 @@ def index():
             image_data = file.read()
             image_data_b64 = base64.b64encode(image_data).decode('utf-8')
             media_type = file.mimetype or 'image/jpeg'
+            if media_type not in ALLOWED_MEDIA_TYPES:
+                media_type = 'image/jpeg'
             preview_url = f'data:{media_type};base64,{image_data_b64}'
             alt_text = generate_alt_text(client, image_data_b64, media_type)
             results.append({
@@ -157,7 +205,7 @@ def mastodon_login():
     try:
         auth_url = mastodon.auth_request_url(
             redirect_uris=redirect_uri,
-            scopes=['read:statuses', 'write:media', 'write:statuses', 'read:accounts'],
+            scopes=MASTODON_SCOPES,
         )
     except Exception as e:
         flash(f'Could not build Mastodon login URL: {e}', 'error')
@@ -183,7 +231,7 @@ def mastodon_callback():
         access_token = mastodon.log_in(
             code=code,
             redirect_uri=redirect_uri,
-            scopes=['read:statuses', 'write:media', 'write:statuses', 'read:accounts'],
+            scopes=MASTODON_SCOPES,
         )
         authed = get_mastodon_client(access_token)
         account = authed.me()
@@ -234,7 +282,7 @@ def posts():
         posts_with_media.append({
             'id': status['id'],
             'url': status['url'],
-            'content': status['content'],
+            'content': _sanitize_html(status['content']),
             'created_at': status['created_at'],
             'images': [
                 {
@@ -270,10 +318,15 @@ def api_generate_alt_text():
     if not image_url:
         return jsonify({'error': 'No image_url provided'}), 400
 
+    if not _safe_image_url(image_url):
+        return jsonify({'error': 'Invalid or disallowed image URL'}), 400
+
     try:
         resp = http_requests.get(image_url, timeout=15)
         resp.raise_for_status()
         media_type = resp.headers.get('Content-Type', 'image/jpeg').split(';')[0].strip()
+        if media_type not in ALLOWED_MEDIA_TYPES:
+            media_type = 'image/jpeg'
         image_data_b64 = base64.b64encode(resp.content).decode('utf-8')
         client = get_openai_client()
         alt_text = generate_alt_text(client, image_data_b64, media_type)
