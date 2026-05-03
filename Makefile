@@ -3,9 +3,9 @@
 VENV_DIR = .venv
 
 install:
-	@echo "Creating virtual environment and installing dependencies with uv..."
+	@echo "Synchronizing virtual environment and installing dependencies with uv..."
 	uv venv
-	source $(VENV_DIR)/bin/activate && uv pip install .
+	source $(VENV_DIR)/bin/activate && uv sync
 
 run:
 	@echo "Running Flask application..."
