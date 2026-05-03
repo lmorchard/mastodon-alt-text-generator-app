@@ -1,14 +1,17 @@
 .PHONY: install run clean
 
 VENV_DIR = .venv
+HOST ?= 0.0.0.0
+PORT ?= 5000
 
 install:
 	@echo "Synchronizing virtual environment and installing dependencies with uv..."
+	uv venv
 	uv sync
 
 run:
-	@echo "Running Flask application..."
-	FLASK_APP=app.py uv run flask run --host 0.0.0.0
+	@echo "Running Flask application on $(HOST):$(PORT)..."
+	FLASK_APP=app.py uv run flask run --host $(HOST) --port $(PORT)
 
 clean:
 	@echo "Cleaning up virtual environment and build artifacts..."
