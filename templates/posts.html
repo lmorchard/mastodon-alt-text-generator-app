@@ -260,6 +260,7 @@
           data-media-id="{{ img.id }}"
           data-image-url="{{ img.url }}"
           data-missing-alt="{{ 'true' if img.missing_alt else 'false' }}"
+          data-post-id="{{ post.id }}"
         >
           <img
             src="{{ img.preview_url }}"
@@ -298,7 +299,7 @@
                 </button>
                 <button
                   class="btn btn-success"
-                  onclick="updateAltText('{{ img.id }}', '{{ img.id }}')"
+                  onclick="updateAltText('{{ post.id }}', '{{ img.id }}', document.getElementById('textarea-{{ img.id }}').value)"
                   id="save-btn-{{ img.id }}"
                 >
                   &#8593; Update on Mastodon
@@ -440,9 +441,9 @@
       }
     }
 
-    async function updateAltText(imgId, mediaId) {
+    async function updateAltText(postId, imgId, altText) {
+      altText = (altText || '').trim();
       const saveBtn = document.getElementById('save-btn-' + imgId);
-      const altText = document.getElementById('textarea-' + imgId).value.trim();
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving…';
       setStatus(imgId, '', '');
@@ -451,7 +452,7 @@
         const resp = await fetch('/api/update-alt-text', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ media_id: mediaId, alt_text: altText }),
+          body: JSON.stringify({ post_id: postId, media_id: imgId, alt_text: altText }),
         });
         const data = await resp.json();
         if (!resp.ok || data.error) {
@@ -508,7 +509,7 @@
           const saveResp = await fetch('/api/update-alt-text', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ media_id: imgId, alt_text: altText }),
+            body: JSON.stringify({ post_id: postId, media_id: imgId, alt_text: altText }),
           });
           const saveData = await saveResp.json();
           if (!saveResp.ok || saveData.error) throw new Error(saveData.error || 'Update failed');
