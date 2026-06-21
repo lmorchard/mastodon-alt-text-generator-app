@@ -7,6 +7,9 @@ This is a Flask web application designed to help with alt-text generation and Ma
 1.  **Local Image Alt-Text Generation:** Upload up to 5 images from your local machine. The app will use an OpenAI-compatible LLM to generate descriptive alt-text for each image.
 2.  **Mastodon Alt-Text Management:** Connect to your Mastodon account via OAuth. You can then view your recent posts with images, identify images missing alt-text, generate alt-text using the LLM, and update the alt-text directly on Mastodon.
 
+![screenshot 1](https://raw.githubusercontent.com/lmorchard/mastodon-alt-text-generator-app/refs/heads/main/Screenshot_20260621_125428.png)
+![screenshot 2](https://raw.githubusercontent.com/lmorchard/mastodon-alt-text-generator-app/refs/heads/main/Screenshot_20260621_125450.png)
+
 ## Setup and Running Instructions
 
 1.  **Navigate to the project directory:**
