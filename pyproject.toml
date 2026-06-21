@@ -13,6 +13,10 @@ dependencies = [
 
 [project.scripts]
 alt-text-app = "app:app"
+alt-text-scan = "scan_alt_text:main"
+
+[tool.setuptools]
+py-modules = ["app", "scan_alt_text"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
